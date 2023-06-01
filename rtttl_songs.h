@@ -3,7 +3,7 @@
 
 #define OCTAVE_OFFSET 0
 
-const int tonePin = PA2;
+const int tonePin = TONE_PIN;
 
 int notes[] = { 0,
 262, 277, 294, 311, 330, 349, 370, 392, 415, 440, 466, 494,
@@ -111,7 +111,7 @@ void play_rtttl(char *p)
     {
       num = (num * 10) + (*p++ - '0');
     }
-   
+
     if(num) duration = wholenote / num;
     else duration = wholenote / default_dur;  // we will need to check if we are a dotted note after
 
@@ -160,7 +160,7 @@ void play_rtttl(char *p)
       duration += duration/2;
       p++;
     }
- 
+
     // now, get scale
     if(isdigit(*p))
     {
@@ -199,5 +199,5 @@ void play_rtttl(char *p)
     }
   }
 }
-  
+
 #endif

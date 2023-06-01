@@ -1,6 +1,17 @@
 #ifndef __FARDUINO_UTILITIES__
 #define __FARDUINO_UTILITIES__
 
+#ifdef RASPBERRYPI_PICO
+char *dtostrf(double val, signed char width, unsigned char prec, char *sout)
+{
+  //Commented code is the original version
+  char fmt[20];
+  sprintf(fmt, "%%%d.%df", width, prec);
+  sprintf(sout, fmt, val);
+  return sout;
+}
+#endif
+
 unsigned long base_seconds = 0;
 unsigned long base_fraction = 0;
 unsigned long last_micros = 0;
@@ -15,7 +26,7 @@ unsigned long get_timestamp(){
   }
   last_micros = current_micros;
 
-  return current_micros;  
+  return current_micros;
 }
 
 
@@ -28,12 +39,12 @@ void remove_spaces(char* my_buffer){
       my_pointer = my_buffer;
       while (*my_pointer!=0){
         *my_pointer = *(my_pointer+1);
-        my_pointer++;    
+        my_pointer++;
       }
     }
     else{
       my_buffer++;
-    }  
+    }
   }
 
 }
@@ -51,8 +62,8 @@ void time_of_day(unsigned long timestamp, char *destination) {
   unsigned long current_fraction = base_fraction + timestamp_fraction;
   current_second = base_seconds + timestamp_seconds + current_fraction/1000000;
   current_fraction = (current_fraction%1000000)/100;
-  
-    
+
+
   current_hour =  current_second / 3600;
   current_second = current_second % 3600;
   current_minute = current_second / 60;
@@ -64,7 +75,7 @@ void time_of_day(unsigned long timestamp, char *destination) {
   destination[6] = '.';
   sprintf(&destination[7], "%04i", current_fraction);
   destination[11] = 0;
-  
+
 }
 
 
@@ -72,7 +83,7 @@ void time_of_day(unsigned long timestamp, char *destination) {
 void construct_IMU_sentence (unsigned long timestamp, double my_acc[3], double my_gyro[3], double my_magn[3], char* sentence_buffer) {
 
   char *buffer_start;                          //pointer to timestamp string
-  
+
   unsigned char xor_checksum;                 //simple XOR checksum
   int k, l;
   char *checksum_pointer;                            //pointer for checksum calculation
@@ -82,40 +93,40 @@ void construct_IMU_sentence (unsigned long timestamp, double my_acc[3], double m
   sprintf(sentence_buffer, "$RQIMU0,");        //write sentence keyword to buffer
   sentence_buffer += 8;                        //adjust pointer to next free entry
   time_of_day(timestamp, sentence_buffer);        //construct string from timestamp
-  sentence_buffer += 11;                       //adjust pointer to next free entry 
-  
+  sentence_buffer += 11;                       //adjust pointer to next free entry
+
   *sentence_buffer++ = ',';                    //add separator and adjust pointer
 
-  for (int i = 0; i < 3; i++) {                //loop through acceleration vector 
+  for (int i = 0; i < 3; i++) {                //loop through acceleration vector
     dtostrf(my_acc[i], 6, 2, sentence_buffer);
     sentence_buffer += 6;
     *sentence_buffer++ = ',';
   }
 
-  for (int i = 0; i < 3; i++) {                //loop through angular rate vector  
+  for (int i = 0; i < 3; i++) {                //loop through angular rate vector
     dtostrf(my_gyro[i], 6, 2, sentence_buffer);
     sentence_buffer += 6;
     *sentence_buffer++ = ',';
   }
 
-  for (int i = 0; i < 2; i++) {                //loop through magnetic field vector  
+  for (int i = 0; i < 2; i++) {                //loop through magnetic field vector
     dtostrf(my_magn[i], 6, 2, sentence_buffer);
     sentence_buffer += 6;
     *sentence_buffer++ = ',';
   }
-  
+
   dtostrf(my_magn[2], 6, 2, sentence_buffer);
   sentence_buffer += 6;
   *sentence_buffer++ = '*';
-  
+
   remove_spaces(buffer_start);
 
-  xor_checksum = 0;                            //calculate checksum  
+  xor_checksum = 0;                            //calculate checksum
   while (*checksum_pointer != '*') {
     xor_checksum ^= *checksum_pointer++;
   }
   sentence_buffer = checksum_pointer;
-                                               //and append it to the sentence in hex format 
+                                               //and append it to the sentence in hex format
   sprintf(sentence_buffer, "*%02X", xor_checksum);
   sentence_buffer += 3;
   *sentence_buffer++ = 0x0d;                  //NMEA sentence termination: $0D $0A
@@ -152,7 +163,7 @@ void construct_MET_sentence(unsigned long timestamp, double p, double T, double 
 
   dtostrf(h, 7, 2, sentence_buffer);
   sentence_buffer += 6;
-  
+
   *sentence_buffer++ = '*';
   remove_spaces(buffer_start);
 
@@ -182,7 +193,7 @@ void construct_state_sentence(unsigned long timestamp, double pressure_0, double
   sentence_buffer += 9;
   time_of_day(timestamp, sentence_buffer);
   sentence_buffer += 11;
-  
+
   *sentence_buffer++ = ',';
 
   switch (my_state) {
@@ -191,7 +202,7 @@ void construct_state_sentence(unsigned long timestamp, double pressure_0, double
         sprintf(sentence_buffer, "IDLE,");
         sentence_buffer += 5;
         dtostrf(pressure_0, 7, 3, sentence_buffer);
-        sentence_buffer += 7;        
+        sentence_buffer += 7;
         break;
       }
 
@@ -199,7 +210,7 @@ void construct_state_sentence(unsigned long timestamp, double pressure_0, double
         sprintf(sentence_buffer, "ACCELERATION,");
         sentence_buffer += 13;
         dtostrf(pressure_0, 7, 3, sentence_buffer);
-        sentence_buffer += 7;        
+        sentence_buffer += 7;
         break;
       }
 
@@ -207,26 +218,26 @@ void construct_state_sentence(unsigned long timestamp, double pressure_0, double
         sprintf(sentence_buffer, "LAUNCH,");
         sentence_buffer += 7;
         dtostrf(pressure_0, 7, 3, sentence_buffer);
-        sentence_buffer += 7;        
+        sentence_buffer += 7;
         break;
-      }  
+      }
 
     case state_BURNOUT: {
         sprintf(sentence_buffer, "BURNOUT,");
         sentence_buffer += 8;
         dtostrf(pressure_0, 7, 3, sentence_buffer);
-        sentence_buffer += 7;        
+        sentence_buffer += 7;
         break;
       }
-      
+
     case state_SEPARATION: {
         sprintf(sentence_buffer, "SEPARATION,");
         sentence_buffer += 11;
         dtostrf(pressure_0, 7, 3, sentence_buffer);
-        sentence_buffer += 7;        
+        sentence_buffer += 7;
         break;
       }
-      
+
 
     case state_COASTING: {
         sprintf(sentence_buffer, "COASTING,");

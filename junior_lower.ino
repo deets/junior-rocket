@@ -6,19 +6,24 @@
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
 
+#ifdef USE_SD_CARD
 #include <SPI.h>
 #include <SdFat.h>
+#endif
+
 #include <RF24.h>
 
 //#define farduino_maple_v1 1
 #define farduino_maple_v2 1
 //#define farduino_maple_v3 1
 
-#include "rtttl_songs.h"
 #include "farduino_constants.h"
 #include "farduino_types.h"
 #include "farduino_utilities.h"
 #include "ring_buffer.h"
+// Must come after farduino_constants.h !
+#include "rtttl_songs.h"
+
 
 #define isdigit(n) (n >= '0' && n <= '9')
 
@@ -104,15 +109,12 @@ byte ground_address[6] = "GRND1";
 char request[32] = "abcdefghijklmnopqrstuvwxyz01234";
 
 CircularBuffer ring(256);
-#ifdef maple_v1
-RF24 radio_nrf24(PA8, PA4);  // for FARduino Maple v0.1
-#else
-RF24 radio_nrf24(PC15, PA4);  // for FARduino Maple v0.2 & v0.3
-#endif
+RF24 radio_nrf24(NRF24_CE_PIN, NRF24_CS_PIN);
 
 bool nrf24l01_present = false;
 
 
+#ifdef USE_SD_CARD
 //SD constants and variables
 const uint8_t chipSelect = PB12;
 SPIClass spi2(2);
@@ -121,6 +123,7 @@ SdFat sd(&spi2);
 bool SD_present = false;
 SdFile dataFile;
 bool file_exists;
+#endif
 
 stage_state_t current_state;
 bool state_changed = true;
@@ -153,7 +156,11 @@ void setup() {
   Wire.setClock(100000);
 
   //open USB com port
+  #ifndef RASPBERRYPI_PICO
   Serial.begin();
+  #else
+  Serial.begin(115200);
+  #endif
 
   //serial port #1 set to 9600 8n1 for GPS data stream
   Serial1.begin(9600);
@@ -204,6 +211,7 @@ void setup() {
 
   // Initialize the SD card at SPI_HALF_SPEED to avoid bus errors with
   // breadboards.  use SPI_FULL_SPEED for better performance.
+  #ifdef USE_SD_CARD
   SD_present = sd.begin(chipSelect, SPI_FULL_SPEED);
   if (!SD_present) {
     Serial.println("<!> no SD card found");
@@ -223,7 +231,8 @@ void setup() {
       }
     } while (file_exists);
   }
-
+  #endif
+  
   //start state machine in IDLE
   current_state = state_IDLE;
   state_changed = true;
@@ -301,13 +310,7 @@ void loop() {
     norm_omega = sqrt(raw_omega[0] * raw_omega[0] + raw_omega[1] * raw_omega[1] + raw_omega[2] * raw_omega[2]);
   
     construct_IMU_sentence(imu_timestamp, acc, omega, raw_B, &sentence[0]);
-    Serial.print(&sentence[0]);
-    if (SD_present) {
-      dataFile.print(&sentence[0]);
-    }
-    if (nrf24l01_present) {
-      send_sentence(&sentence[0]);
-    }
+    send_sentence_to_all(&sentence[0]);
   }
 #elsif
   if (bno055_present) {
@@ -327,13 +330,7 @@ void loop() {
     norm_omega = sqrt(raw_omega[0] * raw_omega[0] + raw_omega[1] * raw_omega[1] + raw_omega[2] * raw_omega[2]);
     
     construct_IMU_sentence(imu_timestamp, acc, omega, raw_B, &sentence[0]);
-    Serial.print(&sentence[0]);
-    if (SD_present) {
-      dataFile.print(&sentence[0]);
-    }
-    if (nrf24l01_present) {
-      send_sentence(&sentence[0]);
-    }
+    send_sentence_to_all(&sentence[0]);
   }
 #endif
 
@@ -345,31 +342,20 @@ void loop() {
   last_timestamp = met_timestamp;
 
   construct_MET_sentence(met_timestamp, pressure, temperature, altitude, &sentence[0]);
-  Serial.print(&sentence[0]);
-  if (SD_present) {
-    dataFile.print(&sentence[0]);
-  }
-  if (nrf24l01_present) {
-    send_sentence(&sentence[0]);
-  }
-
+  send_sentence_to_all(&sentence[0]);
+  
   test_timestamp2 = get_timestamp();
 
   bool gps_available = get_GPS_data();
   if (gps_available) {
-    Serial.print(&GPS_sentence[0]);
-    if (SD_present) {
-      dataFile.print(&GPS_sentence[0]);
-    }
-    if (nrf24l01_present) {
-      send_sentence(&GPS_sentence[0]);
-    }
+    send_sentence_to_all(&GPS_sentence[0]);
   }
 
+
+  #ifdef USE_SD_CARD
   sample_count++;
 
   test_timestamp3 = get_timestamp();
-
   if (SD_present) {
     // Force data to SD and update the directory entry to avoid data loss.
     if (!dataFile.sync() || dataFile.getWriteError()) {
@@ -394,6 +380,7 @@ void loop() {
       sample_count = 0;
     }
   }
+  #endif
 
   test_timestamp4 = get_timestamp();
   
@@ -429,7 +416,7 @@ void loop() {
             current_state = state_ACCELERATION;
             consecutive_count = 0;
             state_changed = true;
-            tone(PA2, 2000, 500);
+            tone(TONE_PIN, 2000, 500);
           }
         } else {
           consecutive_count = 0;
@@ -475,7 +462,7 @@ void loop() {
           current_state = state_IDLE;
           consecutive_count = 0;
           state_changed = true;
-          tone(PA2, 300, 500);
+          tone(TONE_PIN, 300, 500);
         }
 
         //check if pressure below 5 sigma level
@@ -494,11 +481,11 @@ void loop() {
             //set telemetry output to max
             radio_nrf24.setPALevel(RF24_PA_MAX);
             state_changed = true;
-            tone(PA2, 440, 500);
+            tone(TONE_PIN, 440, 500);
             delay(500);
-            tone(PA2, 880, 500);
+            tone(TONE_PIN, 880, 500);
             delay(500);
-            tone(PA2, 1760, 500);
+            tone(TONE_PIN, 1760, 500);
           }
         } else {
           consecutive_count = 0;
@@ -533,11 +520,11 @@ void loop() {
             current_state = state_PEAK_REACHED;
             state_timestamp = peak_timestamp;
             state_changed = true;
-            tone(PA2, 1500, 100);
+            tone(TONE_PIN, 1500, 100);
             delay(200);
-            tone(PA2, 1500, 100);
+            tone(TONE_PIN, 1500, 100);
             delay(200);
-            tone(PA2, 1500, 100);
+            tone(TONE_PIN, 1500, 100);
           }
         }
 
@@ -596,16 +583,7 @@ void loop() {
 
   if (state_changed) {
     construct_state_sentence(state_timestamp, pressure_0, pressure, current_state, &sentence[0]);
-    Serial1.print(&sentence[0]);
-    if (SD_present) {
-      dataFile.print(&sentence[0]);
-    }
-    if (nrf24l01_present) {
-      send_sentence(&sentence[0]);
-      delay(100);
-      send_sentence(&sentence[0]);
-    }
-
+    send_sentence_to_all(&sentence[0]);
     state_changed = false;
   }
 
@@ -658,7 +636,7 @@ loop_count++;
 }
 
 
-void send_sentence(char* message) {
+void send_sentence(const char* message) {
 
   ring.write(message, strlen(message));
 
@@ -874,4 +852,17 @@ void mean_inertial(int n, inertial_measurement_t& data) {
     data.mean_B[j] = sum_B[j] / n;
     data.sigma_B[j] = sqrt((sum_B2[j] - n * data.mean_B[j] * data.mean_B[j]) / (n - 1));
   }
+}
+
+void send_sentence_to_all(const char* sentence)
+{
+    Serial.print(sentence);
+    #ifdef USE_SD_CARD
+    if (SD_present) {
+      dataFile.print(sentence);
+    }
+    #endif
+    if (nrf24l01_present) {
+      send_sentence(sentence);
+    }
 }

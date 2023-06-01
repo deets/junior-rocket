@@ -22,15 +22,32 @@
 #define MIN_PRESSURE_DROP -0.8
 
 #ifdef farduino_maple_v1
+#define USE_SD_CARD
 #define PYRO0 PA14
 #define PYRO1 PA13
 #define PYRO2 PA12
 #define PYRO3 PA11
+#define TONE_PIN PA2
+#define NRF24_CE_PIN PA8
+#define NRF24_CS_PIN PA4
+#elif defined(RASPBERRYPI_PICO)
+#define PYRO0 p14
+#define PYRO1 p13
+#define PYRO2 p12
+#define PYRO3 p11
+#define TONE_PIN p2
+#define NRF24_CE_PIN p8
+#define NRF24_CS_PIN p4
 #else
+#define USE_SD_CARD
 #define PYRO0 PB5
 #define PYRO1 PB4
 #define PYRO2 PB3
 #define PYRO3 PA15
+#define TONE_PIN PA2
+#define NRF24_CE_PIN PC15
+#define NRF24_CS_PIN PA4
+
 #endif
 
 #endif
