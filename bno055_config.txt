@@ -1,0 +1,9 @@
+x - > -x
+y -> -z
+z -> -y
+
+AXIS_MAP_CONFIG : 0b00011000 = 0x18
+  AXIS_MAP_SIGN : 0b00000111 = 0x03
+  
+     ACC_Config : 0b00010011 = 0x13 [Normal mode, 125Hz, 16g]
+	   UNIT_SEL : 0b10000001 = 0x81
