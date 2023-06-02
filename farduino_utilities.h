@@ -29,6 +29,18 @@ unsigned long get_timestamp(){
   return current_micros;
 }
 
+unsigned long timestamp_difference(unsigned long start_time, unsigned long stop_time) {
+  // Assures that our assumption about 32 bits
+  // for unsigned longs holds
+  static_assert(sizeof(unsigned long) == 4);
+
+  if (start_time <= stop_time) {
+    return stop_time - start_time;
+  } else {
+    return (4294967295 - start_time) + stop_time;
+  }
+}
+
 
 void remove_spaces(char* my_buffer){
 

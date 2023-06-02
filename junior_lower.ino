@@ -387,7 +387,7 @@ void loop() {
 
 
   if (current_state != state_IDLE) {
-    flight_time = calc_flight_time(launch_timestamp, met_timestamp);
+    flight_time = timestamp_difference(launch_timestamp, met_timestamp);
   }
 
   delta_pressure = pressure - pressure_0;
@@ -514,7 +514,7 @@ void loop() {
         //wait for a minimum flight time to filter out pressure fluctuations after launch
         if ((flight_time > MIN_FLIGHT_TIME) && (pressure > peak_pressure)) {
 
-          float peak_delta = calc_flight_time(peak_timestamp, met_timestamp);
+          float peak_delta = timestamp_difference(peak_timestamp, met_timestamp);
 
           if (peak_delta > PEAK_DISCRIMINATION_TIME) {
             current_state = state_PEAK_REACHED;
@@ -649,22 +649,6 @@ void send_sentence(const char* message) {
   radio_nrf24.txStandBy();
   radio_nrf24.startListening();
 }
-
-
-unsigned long calc_flight_time(unsigned long start_time, unsigned long stop_time) {
-
-  unsigned long flight_time;
-
-  if (start_time <= stop_time) {
-    flight_time = stop_time - start_time;
-  } else {
-    flight_time = (4294967295 - start_time) + stop_time;
-  }
-
-  return flight_time;
-}
-
-
 
 
 bool get_GPS_data(void) {
