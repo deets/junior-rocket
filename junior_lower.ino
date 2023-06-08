@@ -1,3 +1,6 @@
+#include "junior-rocket-state.hpp"
+#include "state-reactions.hpp"
+
 #include <I2Cdev.h>
 #include <Wire.h>
 #include <MPU9250.h>
@@ -21,8 +24,6 @@
 #include "farduino_types.h"
 #include "farduino_utilities.h"
 #include "ring_buffer.h"
-// Must come after farduino_constants.h !
-#include "rtttl_songs.h"
 
 
 #define isdigit(n) (n >= '0' && n <= '9')
@@ -125,10 +126,8 @@ SdFile dataFile;
 bool file_exists;
 #endif
 
-stage_state_t current_state;
-bool state_changed = true;
-
-// SETUP routine
+StateReactions state_reactions(radio_nrf24);
+far::junior::JuniorRocketState state_machine(state_reactions);
 
 void setup() {
 
@@ -233,10 +232,6 @@ void setup() {
   }
   #endif
   
-  //start state machine in IDLE
-  current_state = state_IDLE;
-  state_changed = true;
-
   String serial_line;
 
 
@@ -382,257 +377,8 @@ void loop() {
   }
   #endif
 
-  test_timestamp4 = get_timestamp();
-  
-
-
-  if (current_state != state_IDLE) {
-    flight_time = timestamp_difference(launch_timestamp, met_timestamp);
-  }
-
-  delta_pressure = pressure - pressure_0;
-
-  test_timestamp5 = get_timestamp();
-
-  unsigned long state_timestamp;
-
-  switch (current_state) {
-
-    case state_IDLE:
-      {
-
-        //check if acceleration higher than 3g
-        if (norm_acc > 2 * ONE_G) {
-          //store first timestamp as possible launch time
-          if (consecutive_count == 0) {
-            launch_timestamp = imu_timestamp;
-          }
-          consecutive_count++;
-
-          //wait for at least 4 consecutive measurements and a minimum of 3g acceleration
-          if (consecutive_count > 4) {
-            //store current time and switch to next state
-            state_timestamp = imu_timestamp;
-            current_state = state_ACCELERATION;
-            consecutive_count = 0;
-            state_changed = true;
-            tone(TONE_PIN, 2000, 500);
-          }
-        } else {
-          consecutive_count = 0;
-
-          //calculate mean pressure at ground level
-          sum_p += pressure;
-          sum_p2 += pressure * pressure;
-          pressure_samples += 1;
-
-          if (pressure_samples == 256) {
-            double new_pressure_0 = sum_p / pressure_samples;
-            double new_sigma_pressure = sqrt(sum_p2 / pressure_samples - new_pressure_0 * new_pressure_0);
-
-            String serial_line;
-
-            if ((new_sigma_pressure > 0.01) && (new_sigma_pressure < 0.03)) {
-              pressure_0 = new_pressure_0;
-              sigma_pressure = new_sigma_pressure;
-
-              //dtostrf(pressure_0, 4, 3, my_line);
-              //serial_line = my_line;
-              //Serial.print("p_0 = (");
-              //Serial.print(serial_line);
-              //dtostrf(sigma_pressure, 4, 3, my_line);
-              //serial_line = my_line;
-              //Serial.print("+/-");
-              //Serial.print(serial_line);
-              //Serial.println(")");
-            }
-            sum_p = 0.0;
-            sum_p2 = 0.0;
-            pressure_samples = 0;
-          }
-        }
-        break;
-      }
-
-    case state_ACCELERATION:
-      {
-
-        if (norm_acc < 2 * ONE_G) {
-          state_timestamp = imu_timestamp;
-          current_state = state_IDLE;
-          consecutive_count = 0;
-          state_changed = true;
-          tone(TONE_PIN, 300, 500);
-        }
-
-        //check if pressure below 5 sigma level
-        if (delta_pressure < MIN_PRESSURE_DROP) {
-          consecutive_count++;
-
-          //wait for at least 8 consecutive measurements and a minimum of 0.8mBar pressure drop
-          if (consecutive_count > 8) {
-            //store current time and switch to next state
-            state_timestamp = met_timestamp;
-            current_state = state_LAUNCH;
-            //remember last pressure/altitude and time as peak parameters
-            peak_pressure = pressure;
-            peak_altitude = altitude;
-            peak_timestamp = met_timestamp;
-            //set telemetry output to max
-            radio_nrf24.setPALevel(RF24_PA_MAX);
-            state_changed = true;
-            tone(TONE_PIN, 440, 500);
-            delay(500);
-            tone(TONE_PIN, 880, 500);
-            delay(500);
-            tone(TONE_PIN, 1760, 500);
-          }
-        } else {
-          consecutive_count = 0;
-        }
-
-        break;
-      }
-
-
-    case state_COASTING:
-      {
-        //check if maximum time to peak has elapsed
-        if (flight_time > MAX_TIME_TO_PEAK) {
-          current_state = state_PEAK_REACHED;
-          state_timestamp = peak_timestamp;
-          state_changed = true;
-        }
-
-        //search for peak with barometer
-        if (pressure < peak_pressure) {
-          peak_pressure = pressure;
-          peak_altitude = altitude;
-          peak_timestamp = met_timestamp;
-        }
-
-        //wait for a minimum flight time to filter out pressure fluctuations after launch
-        if ((flight_time > MIN_FLIGHT_TIME) && (pressure > peak_pressure)) {
-
-          float peak_delta = timestamp_difference(peak_timestamp, met_timestamp);
-
-          if (peak_delta > PEAK_DISCRIMINATION_TIME) {
-            current_state = state_PEAK_REACHED;
-            state_timestamp = peak_timestamp;
-            state_changed = true;
-            tone(TONE_PIN, 1500, 100);
-            delay(200);
-            tone(TONE_PIN, 1500, 100);
-            delay(200);
-            tone(TONE_PIN, 1500, 100);
-          }
-        }
-
-        break;
-      }
-
-    case state_PEAK_REACHED:
-      {
-        //activate two pyros
-        digitalWrite(PYRO0, HIGH);
-        digitalWrite(PYRO1, HIGH);
-        digitalWrite(PYRO2, HIGH);
-        digitalWrite(PYRO3, HIGH);
-
-        current_state = state_FALLING;
-        state_timestamp = met_timestamp;
-        state_changed = true;
-        break;
-      }
-
-    case state_FALLING:
-      {
-        current_state = state_DROGUE_OPENED;
-        state_timestamp = met_timestamp;
-        state_changed = true;
-
-        break;
-      }
-
-    case state_DROGUE_OPENED:
-      {
-        if (delta_pressure > MIN_PRESSURE_DROP) {
-          current_state = state_LANDED;
-          state_timestamp = met_timestamp;
-          state_changed = true;
-        }
-        break;
-      }
-
-    case state_LANDED:
-      {
-        digitalWrite(PYRO0, LOW);
-        digitalWrite(PYRO1, LOW);
-        digitalWrite(PYRO2, LOW);
-        digitalWrite(PYRO3, LOW);
-        state_timestamp = imu_timestamp;
-
-        play_rtttl(indiana_song);
-
-        current_state = state_IDLE;
-        state_changed = true;
-        radio_nrf24.setPALevel(RF24_PA_HIGH);
-        break;
-      }
-  }
-
-  if (state_changed) {
-    construct_state_sentence(state_timestamp, pressure_0, pressure, current_state, &sentence[0]);
-    send_sentence_to_all(&sentence[0]);
-    state_changed = false;
-  }
-
-
-
-test_timestamp6 = get_timestamp();
-
-/*
-    delta_time = test_timestamp7 - test_timestamp0;
-    if (delta_time>50000){
-    delta_time = test_timestamp1 - test_timestamp0;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_0 = "));
-    Serial.println(&my_line[0]);
-
-    delta_time = test_timestamp2 - test_timestamp1;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_1 = "));
-    Serial.println(&my_line[0]);
-
-    delta_time = test_timestamp3 - test_timestamp2;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_2 = "));
-    Serial.println(&my_line[0]);
-
-    delta_time = test_timestamp4 - test_timestamp3;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_3 = "));
-    Serial.println(&my_line[0]);
-
-    delta_time = test_timestamp5 - test_timestamp4;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_SD = "));
-    Serial.println(&my_line[0]);
-
-    delta_time = test_timestamp6 - test_timestamp5;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_5 = "));
-    Serial.println(&my_line[0]);
-
-    delta_time = test_timestamp7 - test_timestamp6;
-    time_of_day(delta_time, &my_line[0]);
-    Serial.print(F("delta t_6 = "));
-    Serial.println(&my_line[0]);
-
-    Serial.println(F("\n\n"));
-    }
-  */
-loop_count++;
+  state_machine.drive(imu_timestamp, pressure, norm_acc);
+  loop_count++;
 }
 
 
