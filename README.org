@@ -1,0 +1,16 @@
+* Junior Rocket Firmware
+
+** Arduino considerations
+
+The state machine is written in C++17. To allow for this to work with
+Arduino, the =platform.txt= needs to change so that it enables C++17.
+
+On my system, this is the file
+
+ =~/Library/Arduino15/packages/arduino/hardware/mbed_rp2040/4.0.2/=
+
+The following line must be present:
+
+#+begin_src python
+compiler.cpp.extra_flags=-std=gnu++17
+#+end_src
