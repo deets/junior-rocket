@@ -1,8 +1,12 @@
-#define USE_NEW_STATE_ENGINE
-#ifdef USE_NEW_STATE_ENGINE
+#include "farduino_constants.h"
+// Must come after farduino_constants.h !
+#include "rtttl_songs.h"
+#include "farduino_types.h"
+#include "farduino_utilities.h"
+#include "ring_buffer.h"
+
 #include "junior-rocket-state.hpp"
 #include "state-reactions.hpp"
-#endif
 
 #include <I2Cdev.h>
 #include <Wire.h>
@@ -24,12 +28,6 @@
 #define farduino_maple_v2 1
 //#define farduino_maple_v3 1
 
-#include "farduino_constants.h"
-// Must come after farduino_constants.h !
-#include "rtttl_songs.h"
-#include "farduino_types.h"
-#include "farduino_utilities.h"
-#include "ring_buffer.h"
 
 
 #define isdigit(n) (n >= '0' && n <= '9')
@@ -98,10 +96,8 @@ SdFile dataFile;
 bool file_exists;
 #endif
 
-#ifdef USE_NEW_STATE_ENGINE
 StateReactions state_reactions(radio_nrf24);
 far::junior::JuniorRocketState state_machine(state_reactions);
-#endif
 
 void setup() {
 
@@ -287,7 +283,7 @@ void loop() {
   }
 
 
-  #ifdef USE_SD_CARD && USE_NEW_STATE_ENGINE
+  #ifdef USE_SD_CARD
   sample_count++;
 
   if (SD_present) {
@@ -315,9 +311,7 @@ void loop() {
     }
   }
   #endif
-#ifdef USE_NEW_STATE_ENGINE
   state_machine.drive(imu_timestamp, pressure, norm_acc);
-#endif
 }
 
 
@@ -451,7 +445,6 @@ void get_MET_data(unsigned long& timestamp, double& temperature, double& pressur
   timestamp = get_timestamp();
   temperature = met.readTemperature();
   pressure = met.readPressure() / 100.0;
-  #ifdef USE_NEW_STATE_ENGINE
   if(const auto ground_pressure = state_machine.ground_pressure())
   {
     altitude = met.readAltitude(*ground_pressure);
@@ -460,9 +453,6 @@ void get_MET_data(unsigned long& timestamp, double& temperature, double& pressur
   {
     altitude = -1.0;
   }
-  #else
-  altitude = -1.0;
-  #endif
 }
 
 
