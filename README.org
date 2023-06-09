@@ -1,5 +1,8 @@
 * Junior Rocket Firmware
 
+This repository contains the Arduino based firmware for the FAR Junior
+two stage rocket.
+
 ** RP2040
 
 The state machine is written in C++17. To allow for this to work with
@@ -18,17 +21,27 @@ compiler.cpp.extra_flags=-std=gnu++17
 Compile with
 
 #+begin_src bash
-arduino-cli compile --fqbn STMicroelectronics:stm32:GenF1
+arduino-cli compile --fqbn arduino:mbed_rp2040:pico
 #+end_src
 
 ** Arduino Maple
 
+Compile with
 
 #+begin_src bash
 arduino-cli compile --fqbn STMicroelectronics:stm32:GenF1 --board-options "pnum=MAPLEMINI_F103CB,opt=oslto"
 #+end_src
 
-*** platform.txt
+*** Linker optimization in platform.txt
+
+Lives in
+
+#+begin_src bash
+~/Library/Arduino15/packages/STMicroelectronics/hardware/stm32/2.5.0/
+#+end_src
+
+for me. Make the following settings look like this:
+
 #+begin_src python
 compiler.ldflags=-Wl,--no-warn-rwx-segments,--gc-sections
 compiler.c.extra_flags=-ffunction-sections -fdata-sections
