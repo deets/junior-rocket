@@ -1,7 +1,9 @@
 // (c) Diez Roggisch, 2023
 // SPDX-License-Identifier: MIT
 #pragma once
+#ifdef USE_IOSTREAM
 #include <ostream>
+#endif
 #include <unordered_map>
 
 namespace tfa {
@@ -62,7 +64,7 @@ public:
     }
     return false;
   }
-
+#ifdef USE_IOSTREAM
   void dot(std::ostream& os, const char* time_signature) {
     os << "digraph timed_finite_automaton {\n";
     // Render our start state
@@ -99,7 +101,7 @@ public:
     }
     os << "}\n";
   }
-
+#endif
 private:
   State _start_state, _state;
   TimePoint _state_change;

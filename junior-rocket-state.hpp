@@ -38,7 +38,7 @@ enum class state
   // We detected a pressure drop, and thus reached
   // the peak.
   PEAK_REACHED,
-  FALLING,
+  FALLING_,
   MEASURE_FALLING_PRESSURE1,
   MEASURE_FALLING_PRESSURE2,
   MEASURE_FALLING_PRESSURE3,
@@ -138,6 +138,7 @@ public:
   void dot(std::ostream& os);
   void drive(uint32_t, float, float);
   std::optional<uint32_t> flighttime() const;
+  std::optional<float> ground_pressure() const;
 
 private:
   void process_pressure(float pressure);
@@ -161,9 +162,11 @@ private:
   std::optional<float> _peak_pressure;
 };
 
-// To allow grahpniz output
+#ifdef USE_IOSTREAM
+// To allow graphviz output
 std::ostream& operator<<(std::ostream&, const state&);
 std::ostream& operator<<(std::ostream&, const event&);
+#endif
 
 } // namespace junior
 } // namespace far

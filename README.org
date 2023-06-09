@@ -1,6 +1,6 @@
 * Junior Rocket Firmware
 
-** Arduino considerations
+** RP2040
 
 The state machine is written in C++17. To allow for this to work with
 Arduino, the =platform.txt= needs to change so that it enables C++17.
@@ -13,4 +13,24 @@ The following line must be present:
 
 #+begin_src python
 compiler.cpp.extra_flags=-std=gnu++17
+#+end_src
+
+Compile with
+
+#+begin_src bash
+arduino-cli compile --fqbn STMicroelectronics:stm32:GenF1
+#+end_src
+
+** Arduino Maple
+
+
+#+begin_src bash
+arduino-cli compile --fqbn STMicroelectronics:stm32:GenF1 --board-options "pnum=MAPLEMINI_F103CB,opt=oslto"
+#+end_src
+
+*** platform.txt
+#+begin_src python
+compiler.ldflags=-Wl,--no-warn-rwx-segments,--gc-sections
+compiler.c.extra_flags=-ffunction-sections -fdata-sections
+compiler.cpp.extra_flags=-ffunction-sections -fdata-sections
 #+end_src

@@ -3,8 +3,9 @@
 
 
 #include "junior-rocket-state.hpp"
-
+#ifdef USE_IOSTREAM
 #include <iostream>
+#endif
 
 using namespace far::junior;
 
@@ -24,18 +25,23 @@ JuniorRocketState::JuniorRocketState(StateObserver& state_observer)
   sm.add_transition(state::LAUNCHED, timeouts::MOTOR_BURNTIME - timeouts::ACCELERATION, state::BURNOUT);
   sm.add_transition(state::BURNOUT, timeouts::SEPARATION_TIMEOUT, state::SEPARATION);
   sm.add_transition(state::SEPARATION, 0, state::COASTING);
-  sm.add_transition(state::COASTING, event::PRESSURE_PEAK_REACHED, state::FALLING);
-  sm.add_transition(state::COASTING, event::EXPECTED_APOGEE_TIME_REACHED, state::FALLING);
-  sm.add_transition(state::FALLING, timeouts::FALLING_PRESSURE_TIMEOUT, state::MEASURE_FALLING_PRESSURE1);
+  sm.add_transition(state::COASTING, event::PRESSURE_PEAK_REACHED, state::FALLING_);
+  sm.add_transition(state::COASTING, event::EXPECTED_APOGEE_TIME_REACHED, state::FALLING_);
+  sm.add_transition(state::FALLING_, timeouts::FALLING_PRESSURE_TIMEOUT, state::MEASURE_FALLING_PRESSURE1);
   sm.add_transition(state::MEASURE_FALLING_PRESSURE1, timeouts::FALLING_PRESSURE_TIMEOUT, state::MEASURE_FALLING_PRESSURE2);
   sm.add_transition(state::MEASURE_FALLING_PRESSURE2, timeouts::FALLING_PRESSURE_TIMEOUT, state::MEASURE_FALLING_PRESSURE3);
   sm.add_transition(state::MEASURE_FALLING_PRESSURE3, event::PRESSURE_LINEAR, state::DROUGE_OPENED);
   sm.add_transition(state::MEASURE_FALLING_PRESSURE3, event::PRESSURE_QUADRATIC, state::DROUGE_FAILED);
   sm.add_transition(state::DROUGE_OPENED, event::PRESSURE_ABOVE_LAUNCH_THRESHOLD, state::LANDED);
   sm.add_transition(state::DROUGE_FAILED, event::PRESSURE_ABOVE_LAUNCH_THRESHOLD, state::LANDED);
-  sm.add_transition(state::DROUGE_FAILED, event::RESTART_PRESSURE_MEASUREMENT, state::FALLING);
+  sm.add_transition(state::DROUGE_FAILED, event::RESTART_PRESSURE_MEASUREMENT, state::FALLING_);
 }
 
+
+std::optional<float> JuniorRocketState::ground_pressure() const
+{
+  return _ground_pressure;
+}
 
 void JuniorRocketState::process_pressure(float pressure)
 {
@@ -44,7 +50,9 @@ void JuniorRocketState::process_pressure(float pressure)
     const auto stats = _ground_pressure_stats->update(pressure);
     if(stats)
     {
+      #ifdef USE_IOSTREAM
       std::cout << "pressure stats: " << stats->average << ", " << stats->variance <<  "\n";
+      #endif
       if(stats->variance < PRESSURE_VARIANCE_THRESHOLD)
       {
         _ground_pressure = stats->average;
@@ -58,14 +66,18 @@ void JuniorRocketState::process_pressure(float pressure)
       if(_peak_pressure)
       {
         const auto median = *_peak_pressure_stats->median();
+        #ifdef USE_IOSTREAM
         std::cout << "median: " << *_peak_pressure << "\n";
+        #endif
         _peak_pressure = std::min(median, *_peak_pressure);
       }
       else
       {
         _peak_pressure = *_peak_pressure_stats->median();
       }
+      #ifdef USE_IOSTREAM
       std::cout << "peak pressure: " << *_peak_pressure << "\n";
+      #endif
     }
   }
 }
@@ -148,7 +160,7 @@ void JuniorRocketState::handle_state_transition(state to, float pressure)
   case state::LAUNCHED:
     _peak_pressure_stats = decltype(_peak_pressure_stats)::value_type();
     break;
-  case state::FALLING:
+  case state::FALLING_:
     // We don't need to keep track anymore
     _peak_pressure_stats = std::nullopt;
     break;
@@ -179,6 +191,8 @@ void JuniorRocketState::drive(uint32_t timestamp, float pressure, float accelera
   if(!_last_timestamp)
   {
     _last_timestamp = timestamp;
+    // Initial call of state observer for our start-state
+    _state_observer.state_changed(timestamp, _state_machine.state());
     return;
   }
   // TODO: timediff!
@@ -215,13 +229,16 @@ std::optional<uint32_t> JuniorRocketState::flighttime() const
   return std::nullopt;
 }
 
+#ifdef USE_IOSTREAM
 void JuniorRocketState::dot(std::ostream &os)
 {
   _state_machine.dot(os, "us");
 }
+#endif
 
 namespace far::junior {
 
+#ifdef USE_IOSTREAM
 #define M_STATE(_state) \
   case state::_state: \
   os << #_state; \
@@ -242,7 +259,7 @@ std::ostream& operator<<(std::ostream& os, const state& state)
     M_STATE(SEPARATION)
     M_STATE(COASTING)
     M_STATE(PEAK_REACHED)
-    M_STATE(FALLING)
+    M_STATE(FALLING_)
     M_STATE(MEASURE_FALLING_PRESSURE1)
     M_STATE(MEASURE_FALLING_PRESSURE2)
     M_STATE(MEASURE_FALLING_PRESSURE3)
@@ -276,5 +293,6 @@ std::ostream& operator<<(std::ostream& os, const event& event)
   }
   return os;
 }
+#endif
 
 } // namespace far::junior

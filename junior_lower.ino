@@ -1,5 +1,8 @@
+#define USE_NEW_STATE_ENGINE
+#ifdef USE_NEW_STATE_ENGINE
 #include "junior-rocket-state.hpp"
 #include "state-reactions.hpp"
+#endif
 
 #include <I2Cdev.h>
 #include <Wire.h>
@@ -10,6 +13,7 @@
 #include <utility/imumaths.h>
 
 #ifdef USE_SD_CARD
+#define USE_STANDARD_SPI_LIBRARY 2  // See SdFatConfig.h
 #include <SPI.h>
 #include <SdFat.h>
 #endif
@@ -21,6 +25,8 @@
 //#define farduino_maple_v3 1
 
 #include "farduino_constants.h"
+// Must come after farduino_constants.h !
+#include "rtttl_songs.h"
 #include "farduino_types.h"
 #include "farduino_utilities.h"
 #include "ring_buffer.h"
@@ -33,47 +39,12 @@
 // AD0 low  = 0x68 (default for InvenSense evaluation board)
 // AD0 high = 0x69
 
-char clock_string_buffer[12];
 char my_name[16];
 char my_line[64];
 char response[64];
 
 unsigned int sample_count = 0;
 unsigned int file_count = 0;
-
-unsigned long launch_timestamp;
-unsigned long peak_timestamp;
-unsigned long last_timestamp;
-
-unsigned long test_timestamp0;
-unsigned long test_timestamp1;
-unsigned long test_timestamp2;
-unsigned long test_timestamp3;
-unsigned long test_timestamp4;
-unsigned long test_timestamp5;
-unsigned long test_timestamp6;
-unsigned long test_timestamp7;
-
-unsigned long timestamp_lookback[16];
-unsigned long loop_count;
-
-double sigma_pressure = 0.0;
-double pressure_0 = 0.0;
-
-
-double sum_p = 0.0;
-double sum_p2 = 0.0;
-int pressure_samples = 0;
-
-double sigma_omega[3] = { 0.0, 0.0, 0.0 };
-double omega_0[3] = { 0.0, 0.0, 0.0 };
-
-int consecutive_count = 0;
-
-double peak_pressure;
-double peak_altitude;
-double max_acc;
-double base_time = 0.0;
 
 double temperature;
 double pressure;
@@ -85,6 +56,7 @@ double raw_B[3];
 
 double acc[3];
 double omega[3];
+double omega_0[3] = { 0.0, 0.0, 0.0 };
 double B[3];
 
 double norm_acc;
@@ -118,7 +90,7 @@ bool nrf24l01_present = false;
 #ifdef USE_SD_CARD
 //SD constants and variables
 const uint8_t chipSelect = PB12;
-SPIClass spi2(2);
+SPIClass spi2;
 SdFat sd(&spi2);
 
 bool SD_present = false;
@@ -126,8 +98,10 @@ SdFile dataFile;
 bool file_exists;
 #endif
 
+#ifdef USE_NEW_STATE_ENGINE
 StateReactions state_reactions(radio_nrf24);
 far::junior::JuniorRocketState state_machine(state_reactions);
+#endif
 
 void setup() {
 
@@ -156,7 +130,7 @@ void setup() {
 
   //open USB com port
   #ifndef RASPBERRYPI_PICO
-  Serial.begin();
+  Serial.begin(115200);
   #else
   Serial.begin(115200);
   #endif
@@ -232,42 +206,16 @@ void setup() {
   }
   #endif
   
-  String serial_line;
-
 
   if (!met.begin(0x76)) {
     Serial.println(F("<!> BMP280 not detected"));
     //halt program if no pressure sensor is detected
     exit(-1);
-  } else {
-    Serial.print(F("Initializing BMP280..."));
-    //repeat measuring the pressure until the error interval is reasonable
-    do {
-      mean_pressure(256, pressure_0, sigma_pressure);
-    } while ((sigma_pressure < 0.005) || (sigma_pressure > 0.5));
-    Serial.println(F("done."));
   }
-
-  consecutive_count = 0;
-
-  dtostrf(pressure_0, 4, 3, my_line);
-  serial_line = my_line;
-
-  Serial.print("p_0 = (");
-  Serial.print(serial_line);
-  dtostrf(sigma_pressure, 4, 3, my_line);
-  serial_line = my_line;
-
-  Serial.print("+/-");
-  Serial.print(serial_line);
-  Serial.println(")");
-
+  
   //indicate readiness for operator
   play_rtttl(never_song);
 
-  loop_count = 0;
-
-  last_timestamp = get_timestamp();
 }
 
 
@@ -284,8 +232,6 @@ void loop() {
   unsigned long mean_count;
   unsigned long delta_time;
   double delta_pressure;
-
-  test_timestamp0 = get_timestamp();
 
 #ifdef farduino_maple_v1
   if (mpu9250_present) {
@@ -330,34 +276,27 @@ void loop() {
 #endif
 
   
-  test_timestamp1 = get_timestamp();
-
   get_MET_data(met_timestamp, temperature, pressure, altitude);
-  delta_time = met_timestamp - last_timestamp;
-  last_timestamp = met_timestamp;
 
   construct_MET_sentence(met_timestamp, pressure, temperature, altitude, &sentence[0]);
   send_sentence_to_all(&sentence[0]);
   
-  test_timestamp2 = get_timestamp();
-
   bool gps_available = get_GPS_data();
   if (gps_available) {
     send_sentence_to_all(&GPS_sentence[0]);
   }
 
 
-  #ifdef USE_SD_CARD
+  #ifdef USE_SD_CARD && USE_NEW_STATE_ENGINE
   sample_count++;
 
-  test_timestamp3 = get_timestamp();
   if (SD_present) {
     // Force data to SD and update the directory entry to avoid data loss.
     if (!dataFile.sync() || dataFile.getWriteError()) {
       //sd.errorHalt(F("write error"));
     }
 
-    if ((sample_count >= MAX_SAMPLE_COUNT) && (current_state == state_IDLE)) {
+    if (sample_count >= MAX_SAMPLE_COUNT && state_reactions.safe_to_flush_sd_card()) {
       dataFile.close();
 
       do {
@@ -376,9 +315,9 @@ void loop() {
     }
   }
   #endif
-
+#ifdef USE_NEW_STATE_ENGINE
   state_machine.drive(imu_timestamp, pressure, norm_acc);
-  loop_count++;
+#endif
 }
 
 
@@ -512,7 +451,18 @@ void get_MET_data(unsigned long& timestamp, double& temperature, double& pressur
   timestamp = get_timestamp();
   temperature = met.readTemperature();
   pressure = met.readPressure() / 100.0;
-  altitude = met.readAltitude(pressure_0);
+  #ifdef USE_NEW_STATE_ENGINE
+  if(const auto ground_pressure = state_machine.ground_pressure())
+  {
+    altitude = met.readAltitude(*ground_pressure);
+  }
+  else
+  {
+    altitude = -1.0;
+  }
+  #else
+  altitude = -1.0;
+  #endif
 }
 
 

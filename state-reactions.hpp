@@ -16,8 +16,13 @@ public:
     : _radio_nrf24(radio_nrf24)
   {}
 
+  bool safe_to_flush_sd_card() const
+  {
+    return _current_state == state::IDLE || _current_state == state::ESTABLISH_GROUND_PRESSURE;
+  }
   void state_changed(uint32_t timestamp, state state) override
   {
+    _current_state = state;
     switch(state)
     {
     case state::ACCELERATING:
@@ -30,7 +35,7 @@ public:
       delay(500);
       tone(TONE_PIN, 1760, 500);
       break;
-    case state::FALLING:
+    case state::FALLING_:
       tone(TONE_PIN, 1500, 100);
       delay(200);
       tone(TONE_PIN, 1500, 100);
@@ -49,7 +54,8 @@ public:
       break;
     }
   }
+
 private:
   RF24& _radio_nrf24;
-
+  state _current_state;
 };
