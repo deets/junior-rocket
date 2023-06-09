@@ -1,0 +1,22 @@
+# Text files
+*.css     text
+*.html    text
+*.js      text
+*.json    text
+*.md      text
+*.org     text
+*.txt     text
+*.xml     text
+*.yaml    text
+*.yml     text
+
+# C++
+*.cpp     text
+*.h       text
+*.hpp     text
+
+# Python
+*.py      text
+
+# Arduino
+*.ino     text
