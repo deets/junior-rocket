@@ -14,7 +14,7 @@ JuniorRocketState::JuniorRocketState(StateObserver& state_observer)
   , _state_observer(state_observer)
 {
   auto& sm = _state_machine; // Just a convenient alias
-  sm.add_transition(state::IDLE, 0, state::ESTABLISH_GROUND_PRESSURE);
+  sm.add_transition(state::IDLE, duration_t::zero(), state::ESTABLISH_GROUND_PRESSURE);
   sm.add_transition(state::ESTABLISH_GROUND_PRESSURE, event::GROUND_PRESSURE_ESTABLISHED, state::WAIT_FOR_LAUNCH);
   sm.add_transition(state::WAIT_FOR_LAUNCH, event::ACCELERATION_ABOVE_THRESHOLD, state::ACCELERATION_DETECTED);
   sm.add_transition(state::ACCELERATION_DETECTED, event::ACCELERATION_BELOW_THRESHOLD, state::WAIT_FOR_LAUNCH);
@@ -24,7 +24,7 @@ JuniorRocketState::JuniorRocketState(StateObserver& state_observer)
   sm.add_transition(state::LAUNCHED, event::ACCELERATION_AROUND_ZERO, state::BURNOUT);
   sm.add_transition(state::LAUNCHED, timeouts::MOTOR_BURNTIME - timeouts::ACCELERATION, state::BURNOUT);
   sm.add_transition(state::BURNOUT, timeouts::SEPARATION_TIMEOUT, state::SEPARATION);
-  sm.add_transition(state::SEPARATION, 0, state::COASTING);
+  sm.add_transition(state::SEPARATION, duration_t::zero(), state::COASTING);
   sm.add_transition(state::COASTING, event::PRESSURE_PEAK_REACHED, state::FALLING_);
   sm.add_transition(state::COASTING, event::EXPECTED_APOGEE_TIME_REACHED, state::FALLING_);
   sm.add_transition(state::FALLING_, timeouts::FALLING_PRESSURE_TIMEOUT, state::MEASURE_FALLING_PRESSURE1);
@@ -82,7 +82,7 @@ void JuniorRocketState::process_pressure(float pressure)
   }
 }
 
-void JuniorRocketState::produce_events(uint32_t timestamp, float pressure, float acceleration)
+void JuniorRocketState::produce_events(timestamp_t timestamp, float pressure, float acceleration)
 {
   if(_ground_pressure) {
     feed(timestamp, event::GROUND_PRESSURE_ESTABLISHED);
@@ -135,7 +135,7 @@ void JuniorRocketState::produce_events(uint32_t timestamp, float pressure, float
   }
 }
 
-void JuniorRocketState::feed(uint32_t timestamp, event e)
+void JuniorRocketState::feed(timestamp_t timestamp, event e)
 {
   _state_machine.feed(e);
   _state_observer.event_produced(timestamp, e);
@@ -185,7 +185,7 @@ void JuniorRocketState::assess_pressure_drop()
   _pressure_drop_assessment = pressure_drop::LINEAR;
 }
 
-void JuniorRocketState::drive(uint32_t timestamp, float pressure, float acceleration)
+void JuniorRocketState::drive(timestamp_t timestamp, float pressure, float acceleration)
 {
   _state_observer.data(timestamp, pressure, acceleration);
   if(!_last_timestamp)
@@ -217,13 +217,12 @@ void JuniorRocketState::drive(uint32_t timestamp, float pressure, float accelera
 
 }
 
-std::optional<uint32_t> JuniorRocketState::flighttime() const
+std::optional<duration_t> JuniorRocketState::flighttime() const
 {
   if(_liftoff_timestamp)
   {
     // We know _last_timestamp must be valid, as
     // no liftoff could exist otherwise
-    // TODO: timediff!
     return *_last_timestamp - *_liftoff_timestamp;
   }
   return std::nullopt;
@@ -296,3 +295,14 @@ std::ostream& operator<<(std::ostream& os, const event& event)
 #endif
 
 } // namespace far::junior
+
+namespace tfa {
+
+std::ostream& operator<<(std::ostream& os, const far::junior::duration_t& d)
+{
+  using namespace std::chrono_literals;
+  os << (d / 1us);
+  return os;
+}
+
+}

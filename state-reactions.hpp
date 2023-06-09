@@ -20,7 +20,8 @@ public:
   {
     return _current_state == state::IDLE || _current_state == state::ESTABLISH_GROUND_PRESSURE;
   }
-  void state_changed(uint32_t timestamp, state state) override
+
+  void state_changed(timestamp_t timestamp, state state) override
   {
     _current_state = state;
     switch(state)

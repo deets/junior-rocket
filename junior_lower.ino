@@ -24,6 +24,8 @@
 
 #include <RF24.h>
 
+#include <chrono>
+
 //#define farduino_maple_v1 1
 #define farduino_maple_v2 1
 //#define farduino_maple_v3 1
@@ -102,7 +104,6 @@ far::junior::JuniorRocketState state_machine(state_reactions);
 void setup() {
 
   double altitude;
-  unsigned long imu_timestamp;
   unsigned long met_timestamp;
   double sigma_w;
 
@@ -222,16 +223,16 @@ void loop() {
 
   char sentence[100];
 
-  unsigned long imu_timestamp;
   unsigned long met_timestamp;
   unsigned long flight_time;
   unsigned long mean_count;
   unsigned long delta_time;
   double delta_pressure;
 
+  const auto imu_timestamp = std::chrono::steady_clock::now();
 #ifdef farduino_maple_v1
   if (mpu9250_present) {
-    get_mpu9250_data(imu_timestamp, raw_acc[0], raw_acc[1], raw_acc[2], raw_omega[0], raw_omega[1], raw_omega[2], raw_B[0], raw_B[1], raw_B[2]);
+    get_mpu9250_data(raw_acc[0], raw_acc[1], raw_acc[2], raw_omega[0], raw_omega[1], raw_omega[2], raw_B[0], raw_B[1], raw_B[2]);
     
     acc[0] = raw_acc[0]/ONE_G;
     acc[1] = raw_acc[1]/ONE_G;
@@ -251,7 +252,7 @@ void loop() {
   }
 #elsif
   if (bno055_present) {
-    get_bno055_data(imu_timestamp, raw_acc[0], raw_acc[1], raw_acc[2], raw_omega[0], raw_omega[1], raw_omega[2], raw_B[0], raw_B[1], raw_B[2]);
+    get_bno055_data(raw_acc[0], raw_acc[1], raw_acc[2], raw_omega[0], raw_omega[1], raw_omega[2], raw_B[0], raw_B[1], raw_B[2]);
     
     acc[0] = raw_acc[0]/ONE_G;
     acc[1] = raw_acc[1]/ONE_G;
@@ -390,13 +391,12 @@ bool get_GPS_data(void) {
 
 
 
-void get_mpu9250_data(unsigned long& timestamp, double& acc_x, double& acc_y, double& acc_z, double& omega_x, double& omega_y, double& omega_z, double& mag_x, double& mag_y, double& mag_z) {
+void get_mpu9250_data(double& acc_x, double& acc_y, double& acc_z, double& omega_x, double& omega_y, double& omega_z, double& mag_x, double& mag_y, double& mag_z) {
 
   int16_t ax, ay, az;
   int16_t wx, wy, wz;
   int16_t Bx, By, Bz;
 
-  timestamp = get_timestamp();
   imu_mpu9250.getMotion9(&ax, &ay, &az, &wx, &wy, &wz, &Bx, &By, &Bz);
 
   acc_x = (double)ax;
@@ -413,11 +413,9 @@ void get_mpu9250_data(unsigned long& timestamp, double& acc_x, double& acc_y, do
 }
 
 
-void get_bno055_data(unsigned long& timestamp, double& acc_x, double& acc_y, double& acc_z, double& omega_x, double& omega_y, double& omega_z, double& mag_x, double& mag_y, double& mag_z) {
+void get_bno055_data(double& acc_x, double& acc_y, double& acc_z, double& omega_x, double& omega_y, double& omega_z, double& mag_x, double& mag_y, double& mag_z) {
 
   sensors_event_t magneticData, angVelocityData, accelData;
-
-  timestamp = get_timestamp();
 
   imu_bno055.getEvent(&magneticData, Adafruit_BNO055::VECTOR_MAGNETOMETER);
   imu_bno055.getEvent(&angVelocityData, Adafruit_BNO055::VECTOR_GYROSCOPE);
@@ -497,7 +495,7 @@ void mean_inertial(int n, inertial_measurement_t& data) {
   double B[3];
 
   for (int k = 0; k < n; k++) {
-    get_mpu9250_data(timestamp, norm_acc[0], norm_acc[1], norm_acc[2], norm_omega[0], norm_omega[1], norm_omega[2], B[0], B[1], B[2]);
+    get_mpu9250_data(norm_acc[0], norm_acc[1], norm_acc[2], norm_omega[0], norm_omega[1], norm_omega[2], B[0], B[1], B[2]);
 
     for (int j = 0; j < 3; j++) {
       sum_acc[j] += norm_acc[j];
@@ -536,3 +534,32 @@ void send_sentence_to_all(const char* sentence)
       send_sentence(sentence);
     }
 }
+
+#include <sys/time.h>
+#ifndef RASPBERRYPI_PICO
+extern "C" int gettimeofday( struct timeval *tv, void *tzvp )
+{
+  static bool initialized = false;
+  static uint64_t usec;
+  static uint64_t sec;
+  static uint64_t last_timestamp;  
+  if(!initialized)
+  {
+    initialized = true;
+    sec = usec = 0;
+    last_timestamp = micros();
+  }
+  else
+  {
+    uint64_t now = micros();
+    uint64_t diff = timestamp_difference(now, last_timestamp);
+    usec += diff;
+    sec += usec / 1000000;
+    usec %= 1000000;
+  }
+    
+  tv->tv_sec = sec;
+  tv->tv_usec = usec;
+  return 0;
+}
+#endif

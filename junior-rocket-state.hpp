@@ -2,14 +2,34 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <chrono>
+#include <ostream>
+
+namespace far::junior {
+
+using timestamp_t = std::chrono::steady_clock::time_point;
+using duration_t = std::chrono::steady_clock::duration;
+
+}
+
+
+namespace tfa {
+
+std::ostream& operator<<(std::ostream&, const far::junior::duration_t&);
+
+}
+
 #include "timed-finite-automaton.hpp"
 #include "statistics.hpp"
 #include <cstdint>
-#include <ostream>
 #include <optional>
 
-namespace far {
-namespace junior {
+namespace far::junior {
+
+using timestamp_t = std::chrono::steady_clock::time_point;
+using duration_t = std::chrono::steady_clock::duration;
+using namespace std::chrono_literals;
+
 
 enum class state
 {
@@ -47,12 +67,11 @@ enum class state
   LANDED,
 };
 
-// Time is  measured in microseconds!
-enum timeouts : uint32_t {
-  ACCELERATION = 400*1000,
-  SEPARATION_TIMEOUT = 1000*1000,
-  MOTOR_BURNTIME = 2500*1000,
-  FALLING_PRESSURE_TIMEOUT = 1000*1000,
+struct timeouts {
+  static constexpr duration_t ACCELERATION = 400ms;
+  static constexpr duration_t SEPARATION_TIMEOUT = 1s;
+  static constexpr duration_t MOTOR_BURNTIME = 2500ms;
+  static constexpr duration_t FALLING_PRESSURE_TIMEOUT = 1s;
 };
 
 enum class pressure_drop {
@@ -73,10 +92,10 @@ constexpr float LAUNCH_PRESSURE_DIFFERENTIAL = 5.0;
 // accept to say "we've peaked"
 constexpr float PEAK_PRESSURE_MARGIN = .6;
 // Apogee according to simulation
-constexpr float APOGEE_TIME = 6565*1000;
+constexpr duration_t APOGEE_TIME = 6565ms;
 // Together with APOGEE_TIME used to trigger
 // chute ejection.
-constexpr float APOGEE_DETECTION_MARGIN = 5000*1000;
+constexpr duration_t APOGEE_DETECTION_MARGIN = 5s;
 constexpr float INITIAL_PRESSURE_VARIANCE = 1.0;
 constexpr float PRESSURE_VARIANCE_THRESHOLD = 3.0;
 
@@ -101,23 +120,23 @@ enum class event {
 #define M_UNUSED(variable) (void)variable;
 
 struct StateObserver {
-  virtual void data(uint32_t timestamp, float pressure, float acceleration)
+  virtual void data(timestamp_t timestamp, float pressure, float acceleration)
   {
     M_UNUSED(timestamp);
     M_UNUSED(pressure);
     M_UNUSED(acceleration);
   }
 
-  virtual void state_changed(uint32_t timestamp, state)
+  virtual void state_changed(timestamp_t timestamp, state)
   {
     M_UNUSED(timestamp);
   }
-  virtual void event_produced(uint32_t timestamp, event)
+  virtual void event_produced(timestamp_t timestamp, event)
   {
     M_UNUSED(timestamp);
   }
 
-  virtual void elapsed(uint32_t timestamp, uint32_t elapsed)
+  virtual void elapsed(timestamp_t timestamp, duration_t elapsed)
   {
     M_UNUSED(timestamp);
     M_UNUSED(elapsed);
@@ -126,7 +145,7 @@ struct StateObserver {
 
 
 class JuniorRocketState {
-  using state_machine_t = tfa::TimedFiniteAutomaton<state, event, uint32_t>;
+  using state_machine_t = tfa::TimedFiniteAutomaton<state, event, timestamp_t>;
 
 public:
 
@@ -136,22 +155,22 @@ public:
   JuniorRocketState(JuniorRocketState&&) = delete;
 
   void dot(std::ostream& os);
-  void drive(uint32_t, float, float);
-  std::optional<uint32_t> flighttime() const;
+  void drive(timestamp_t, float, float);
+  std::optional<duration_t> flighttime() const;
   std::optional<float> ground_pressure() const;
 
 private:
   void process_pressure(float pressure);
-  void produce_events(uint32_t timestamp, float pressure, float acceleration);
+  void produce_events(timestamp_t timestamp, float pressure, float acceleration);
   void handle_state_transition(state to, float pressure);
-  void feed(uint32_t timestamp, event);
+  void feed(timestamp_t timestamp, event);
   void assess_pressure_drop();
 
   state_machine_t _state_machine;
 
-  std::optional<uint32_t> _last_timestamp;
+  std::optional<timestamp_t> _last_timestamp;
   std::optional<float> _ground_pressure;
-  std::optional<uint32_t> _liftoff_timestamp;
+  std::optional<timestamp_t> _liftoff_timestamp;
 
   StateObserver& _state_observer;
 
@@ -168,5 +187,4 @@ std::ostream& operator<<(std::ostream&, const state&);
 std::ostream& operator<<(std::ostream&, const event&);
 #endif
 
-} // namespace junior
-} // namespace far
+} // namespace far::junior
